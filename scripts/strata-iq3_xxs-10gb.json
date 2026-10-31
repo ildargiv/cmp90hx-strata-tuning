@@ -1,0 +1,58 @@
+{
+  "exe": "C:\\Users\\User\\Desktop\\ФотоНова\\Strata\\engine\\strata.exe",
+  "args": [
+    "--pack",
+    "C:\\Strata-data\\packs\\iq3_xxs",
+    "--native",
+    "C:\\Strata-data\\models\\IQ3_XXS\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf",
+    "--ple-gguf",
+    "C:\\Strata-data\\models\\IQ3_XXS\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00002-of-00002.gguf",
+    "--expert-profile",
+    "C:\\Users\\User\\Desktop\\ФотоНова\\Strata\\data\\expert-profile.bin",
+    "--expert-cache",
+    "auto",
+    "--prefill",
+    "7168",
+    "--spec",
+    "4",
+    "--mtp",
+    "C:\\Strata-data\\mtp\\rt",
+    "--max-context",
+    "262144",
+    "--kv",
+    "q4_0",
+    "--kv-resident",
+    "32768",
+    "--vision",
+    "--vram-reserve-mib",
+    "1200",
+    "--spec-min-p",
+    "0.5",
+    "--conversation-cache-mib",
+    "6144",
+    "--conversation-cache-min-tokens",
+    "2048",
+    "--conversation-cache-park-gain",
+    "256"
+  ],
+  "cwd": "C:\\Users\\User\\Desktop\\ФотоНова\\Strata",
+  "tokenizer": "C:\\Strata-data\\packs\\iq3_xxs\\tokenizer",
+  "model_name": "qwen3.8-flash-next-iq3_xxs-10gb",
+  "log": "C:\\\\Users\\\\User\\\\Desktop\\\\ФотоНова\\\\Strata\\\\strata-iq3_xxs-10gb.log",
+  "lib_dirs": [
+    "C:\\Users\\User\\Desktop\\ФотоНова\\Strata\\.venv\\Lib\\site-packages\\nvidia\\cu13\\bin\\x86_64"
+  ],
+  "port": 8090,
+  "host": "0.0.0.0",
+  "allowed_hosts": "*",
+  "vision": {
+    "exe": "C:\\Users\\User\\Desktop\\ФотоНова\\Strata\\engine\\strata-vision.exe",
+    "mmproj": "C:\\Strata-data\\models\\mmproj-Qwen3.8-Flash-Next-BF16.gguf",
+    "model": "C:\\Strata-data\\models\\IQ3_XXS\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_XXS-00001-of-00002.gguf",
+    "gpu": true,
+    "max_tokens": 1024
+  },
+  "env": {
+    "STRATA_ROUTE_PRIOR": "1.5"
+  }
+}

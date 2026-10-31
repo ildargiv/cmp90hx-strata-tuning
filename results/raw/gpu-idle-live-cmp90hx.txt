@@ -1,0 +1,12 @@
+Live idle snapshot, 1 Nov 2026 01:46, server running (Strata IQ3_XXS, n_ctx 262144), no inference in flight.
+
+util.gpu        : 0 %
+util.memory     : 0 %
+clocks.sm       : 315 MHz (max 2100)
+clocks.mem      : 9501 MHz (max 9501)  <-- memory NEVER power-gates on this card
+power.draw      : 78.6 W   (limit 250 W)
+temp            : 56 C
+memory.used     : 9002 MiB / 10240 MiB
+pcie            : Gen1 x4 (locked, no PCI unlock yet)
+perf state      : P0 (card does not drop to lower P-states)
+throttle        : Idle Active only
