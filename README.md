@@ -10,6 +10,27 @@ test it in different applications. Chapter 1 (this file) is the hardware profile
 baseline. The previous card (RTX 3060 12 GB) has its own history:
 [rtx3060-strata-tuning](https://github.com/ildargiv/rtx3060-strata-tuning).
 
+## The fleet and the hardware roadmap
+
+Two CMP cards are part of this history. Only the 90HX is installed and measured as of Chapter 1.
+
+| Card | Architecture | Memory (stock) | Planned hardware mod | Measured |
+|---|---|---|---|---|
+| **CMP 90HX** | GA102, Ampere, sm_86, 80 SM | 10 GB GDDR6X, 760 GB/s | **Solder the missing power capacitors → PCIe unlock up to Gen2 × 16** (x4 → x16) | Chapter 1 baseline (Gen1 × 4, no caps) |
+| **CMP 50HX** | TU102, Turing, sm_75, 3584 cores | 10 GB GDDR6, 560 GB/s | **Memory upgrade to 20 GB** (+ the same capacitor/PCIe unlock) | Not installed yet |
+
+The mods are planned, not performed. Every number in this repository is labelled with the
+hardware state it was measured in, and future chapters re-measure after each change:
+
+- **Chapter 2** — 90HX with soldered capacitors: expect the PCIe link to rise from **Gen1 × 4** to
+  **Gen2 × 16** (the device max), i.e. 4× the streaming bandwidth. All Chapter 1 numbers become the
+  honest "before".
+- **Chapter 3** — CMP 50HX arrives with **20 GB VRAM**: twice the expert-cache budget and far less
+  PCIe dependence. It is a Turing (sm_75) card, so it inherits fewer of Strata's sm_80+ kernels,
+  but 20 GB makes it the fleet's high-VRAM card for AI.
+
+See the internet research behind this in `docs/CMP-BACKGROUND.md` (added in Chapter 2).
+
 ---
 
 ## Chapter 1 (1 Nov 2026): hardware profile and Strata baseline
@@ -41,7 +62,9 @@ capability max, so the link negotiates at **Gen1 × 4** at all times, even on a 
 host supports Gen3/Gen4. That is roughly **1 GB/s**, versus 16 GB/s for Gen3 × 16 the previous
 card used. This single fact drives every number below.
 
-Full `nvidia-smi -q` dump: `results/raw/hardware-cmp90hx.txt`.\n\n**Observed idle state (1 Nov 01:46, server loaded, no inference).** Memory clock stays at
+Full `nvidia-smi -q` dump: `results/raw/hardware-cmp90hx.txt`.
+
+**Observed idle state (1 Nov 01:46, server loaded, no inference).** Memory clock stays at
 **9501 MHz — the max — even in idle**, performance state stays at P0, power 78.6 W (limit 250 W),
 temp 56 °C. This card never lowers memory clock or enters a low P-state on its own; idle power is
 high by design. Live snapshot: `results/raw/gpu-idle-live-cmp90hx.txt`.
@@ -99,6 +122,75 @@ throughput is far above GA106's; it simply cannot be fed.
 
 ---
 
+## Chapter 2 (1 Nov 2026): ComfyUI on the 90HX — Z-Image turbo
+
+The card's second application: ComfyUI. On this machine it lives as a specialised fork at
+`D:\ComfyUI-h3` (tuned for MiniMax H3 / YuE2 / Z-Image / ACE-Step / Wan2.2, with **int8 convrot**
+conversions in its `models/`), which is what the card runs here. Server: ComfyUI 0.36.0, Python
+3.11.9, torch 2.14.0+cu130, CUDA 13.0, launched headless on `cuda:0`:
+
+```
+python main.py --listen 127.0.0.1 --port 8188 --disable-auto-launch --cuda-device 0
+```
+
+`/system_stats` reports `cuda:0 NVIDIA CMP 90HX` with ~9.6 GB of the 10 GB free.
+
+### Fork quirk: stock graphs do not run
+
+The first attempt used the classic `CheckpointLoaderSimple → KSampler` graph with the bundled
+checkpoint (`yue2_3b_int8_convrot.safetensors`). The run fails in KSampler with
+`ValueError: too many values to unpack (expected 3)`: the fork's models need their own loaders and
+text encoders. The fork ships a working example, `workflows/zimage_turbo_smoketest.json`, which is
+the graph used below.
+
+### The working t2i graph (Z-Image-Turbo, int8)
+
+| Node | Input | Value |
+|---|---|---|
+| UNETLoader | unet_name | `z_image_turbo_int8_convrot.safetensors` |
+| CLIPLoader | clip_name / type | `qwen_3_4b.safetensors` / `stable_diffusion` |
+| VAELoader | vae_name | `ae.safetensors` |
+| TextEncodeZImageOmni | clip / prompt | same CLIP, t2i prompt |
+| EmptyLatentImage | 1024 × 1024 | batch 1 |
+| KSampler | euler / simple | cfg 1.0, steps 8, denoise 1.0 |
+| VAEDecode → SaveImage | | prefix `cmp90hx_zimage` |
+
+Note: the fork deduplicates identical prompts — resubmitting the same seed returns in ~0.5 s
+without touching the GPU or writing a new file. Every timing below uses a fresh seed.
+
+### Results (fresh seed 12345)
+
+Timing is the honest full pipeline (submit → PNG on disk), run warm (models already loaded):
+
+| Stage | Wall time |
+|---|---|
+| Full t2i pipeline, 1024 × 1024 | **97.2 s** |
+| KSampler, 8 steps | ~76 s → **~9.5 s/it** |
+| VAE decode + save (included above) | ~21 s |
+
+The first (cold) run took 183 s, including ~42 s of model initialisation before step 1. Both
+outputs are correct images from the prompt (a tabby cat on a windowsill) — the card computes, it
+does not just stream. Outputs: `results/raw/comfyui-zimage-90hx-0000X-s*.png`; GPU traces:
+`results/raw/gpu-power-comfy90hx-zimage-{1st,2nd}.csv`.
+
+### GPU profile during generation (util > 50 %)
+
+| Sampled during load | Value |
+|---|---|
+| PCIe link | **Gen1 × 4 in 100 % of load samples** (as in Chapter 1) |
+| Utilisation | avg 96–100 % |
+| Power | avg 111–114 W, max 117 W (limit 250 W) |
+| SM clock | max 1860 MHz (cap 2100) |
+| VRAM | peak 9.25–9.4 GB of 10.24 GB |
+
+Unlike Strata, the whole 3B-int8 model fits in the 10 GB, so the PCIe lock is not the step-time
+bottleneck here. Util pins at 100 % yet power stays around 115 W: an 80-SM GA102 is overkill and
+mostly idle inside each layer, and the ~9.5 s/it is the backend's own cost for this int8 model at
+1024 × 1024. That makes ComfyUI the worse workload to blame the link on — the headline stays the
+capacitor/PCIe re-measure, not this app.
+
+---
+
 ## Application test log
 
 The card is tested across applications; each row is its own chapter once published.
@@ -106,6 +198,7 @@ The card is tested across applications; each row is its own chapter once publish
 | Date | Application | Backend | Result | Files |
 |---|---|---|---|---|
 | 1 Nov 2026 | Strata (serve) | engine 0.1.54, IQ3_XXS | decode 35.6, prefill 34.0 tok/s (Gen1 × 4) | `results/raw/bench-cmp90hx-10gb-baseline.json` |
+| 1 Nov 2026 | ComfyUI (H3 fork) | torch 2.14 + cu130, Z-Image-Turbo int8, 1024² | t2i 8 steps ~76 s (~9.5 s/it), pipeline 97 s, Gen1 × 4 | `results/raw/comfyui-zimage-90hx-00002-seed12345.png`, CSV traces |
 
 Planned: more LLM runtimes, and other workloads, in later chapters.
 
@@ -122,4 +215,4 @@ Planned: more LLM runtimes, and other workloads, in later chapters.
 Configs: `scripts/strata-iq3_xxs-10gb.json`, restart helper `scripts/restart-cmp90hx.ps1`.
 
 ## License
-Text and measurements are MIT (see the 3060 repo for the full text). Raw data stays in `results/raw/.
+Text and measurements are MIT (see the 3060 repo for the full text). Raw data stays in `results/raw/`.
